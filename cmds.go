@@ -38,6 +38,7 @@ func postForm(pathname string, data url.Values) (r JSONResponse, err error) {
 }
 
 func actionStartServer(c *cli.Context) error {
+	log.Println("actionStartServer")
 	suv, hdlr, err := newSupervisorHandler()
 	if err != nil {
 		log.Fatal(err)

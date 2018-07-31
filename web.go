@@ -29,14 +29,6 @@ import (
 
 var defaultGosuvDir string
 
-func init() {
-	defaultGosuvDir = os.Getenv("GOSUV_HOME_DIR")
-	if defaultGosuvDir == "" {
-		defaultGosuvDir = filepath.Join(UserHomeDir(), ".gosuv")
-	}
-	http.Handle("/res/", http.StripPrefix("/res/", http.FileServer(Assets))) // http.StripPrefix("/res/", Assets))
-}
-
 type Supervisor struct {
 	ConfigDir string
 
@@ -649,7 +641,7 @@ func (s *Supervisor) AutoStartPrograms() {
 
 func newSupervisorHandler() (suv *Supervisor, hdlr http.Handler, err error) {
 	suv = &Supervisor{
-		ConfigDir: filepath.Join(defaultGosuvDir, "conf"),
+		ConfigDir: filepath.Join(defaultGosuvDir, "./"),
 		pgMap:     make(map[string]Program, 0),
 		procMap:   make(map[string]*Process, 0),
 		eventB:    NewWriteBroadcaster(4 * 1024),

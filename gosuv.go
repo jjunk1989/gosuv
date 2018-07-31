@@ -3,17 +3,21 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/goji/httpauth"
 	"github.com/imroc/req"
+	"github.com/jjunk1989/loger"
+	"github.com/kardianos/service"
 	"github.com/qiniu/log"
-	"github.com/urfave/cli"
 )
 
 const appID = "app_8Gji4eEAdDx"
@@ -21,6 +25,7 @@ const appID = "app_8Gji4eEAdDx"
 var (
 	version string = "master"
 	cfg     Configuration
+	Log     *loger.Loger
 )
 
 type TagInfo struct {
@@ -110,119 +115,86 @@ func checkServerStatus() error {
 	return nil
 }
 
-func main() {
-	var defaultConfigPath = filepath.Join(defaultGosuvDir, "conf/config.yml")
+type ServiceManager struct {
+}
 
-	app := cli.NewApp()
-	app.Name = "gosuv"
-	app.Version = version
-	app.Usage = "golang port of python-supervisor"
-	app.Before = func(c *cli.Context) error {
-		var err error
-		cfgPath := c.GlobalString("conf")
-		cfg, err = readConf(cfgPath)
+func (s *ServiceManager) Start(service.Service) (err error) {
+	if !service.Interactive() {
+		Log.Info("under sys service")
+	}
+	// Start should not block. Do the actual work async.
+	go s.run()
+	return
+}
+
+func (s *ServiceManager) Stop(service.Service) (err error) {
+	return
+}
+
+func (s *ServiceManager) run() {
+	Log.Info("startServerDirect")
+	suv, hdlr, err := newSupervisorHandler()
+	if err != nil {
+		Log.Error(err)
+		return
+	}
+	if err = newDistributed(suv, hdlr); err != nil {
+		Log.Error(err)
+		return
+	}
+
+	cfg, _ = readConf(path.Join(defaultGosuvDir, "config.yml"))
+	auth := cfg.Server.HttpAuth
+	if auth.Enabled {
+		hdlr = httpauth.SimpleBasicAuth(auth.User, auth.Password)(hdlr)
+	}
+	http.Handle("/", hdlr)
+	addr := cfg.Server.Addr
+	suv.AutoStartPrograms()
+	Log.Info("server listen on:", addr)
+	if err = http.ListenAndServe(addr, nil); err != nil {
+		Log.Error("http listen error", err)
+	}
+	Log.Info("server stoped")
+}
+
+func init() {
+	defaultGosuvDir = os.Getenv("GOSUV_HOME_DIR")
+	if defaultGosuvDir == "" {
+		log.Info("cant find env: GOSUV_HOME_DIR, please set.")
+		defaultGosuvDir = filepath.Join(UserHomeDir(), ".gosuv")
+	}
+	log.Info("defaultGosuvDir:", defaultGosuvDir)
+	http.Handle("/res/", http.StripPrefix("/res/", http.FileServer(Assets))) // http.StripPrefix("/res/", Assets))
+	Log = loger.NewLoger(path.Join(defaultGosuvDir, "servermanagerLog"))
+}
+
+func main() {
+	//	var defaultConfigPath = filepath.Join(defaultGosuvDir, "conf/config.yml")
+	svcFlag := flag.String("service", "", "start, stop, restart, install, uninstall.")
+	flag.Parse()
+
+	svcConfig := &service.Config{
+		Name:        "ServerManager",
+		DisplayName: "Mananger server",
+		Description: "Mananger server.",
+	}
+
+	s, err := service.New(&ServiceManager{}, svcConfig)
+	if err != nil {
+		Log.Error(err)
+	}
+
+	if len(*svcFlag) != 0 {
+		err := service.Control(s, *svcFlag)
 		if err != nil {
-			log.Fatal(err)
+			Log.Printf("Valid actions: %q\n", service.ControlAction)
+			Log.Error(err)
 		}
-		return nil
+		return
 	}
-	app.Authors = []cli.Author{
-		cli.Author{
-			Name:  "codeskyblue",
-			Email: "codeskyblue@gmail.com",
-		},
-	}
-	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:  "conf, c",
-			Usage: "config file",
-			Value: defaultConfigPath,
-		},
-	}
-	app.Commands = []cli.Command{
-		{
-			Name:  "start-server",
-			Usage: "Start supervisor and run in background",
-			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:  "foreground, f",
-					Usage: "start in foreground",
-				},
-				cli.StringFlag{
-					Name:  "conf, c",
-					Usage: "config file",
-					Value: defaultConfigPath,
-				},
-			},
-			Action: actionStartServer,
-		},
-		{
-			Name:    "status",
-			Aliases: []string{"st"},
-			Usage:   "Show program status",
-			Action:  actionStatus,
-		},
-		{
-			Name:   "start",
-			Usage:  "Start program",
-			Action: actionStart,
-		},
-		{
-			Name:   "stop",
-			Usage:  "Stop program",
-			Action: actionStop,
-		},
-		{
-			Name:   "reload",
-			Usage:  "Reload config file",
-			Action: actionReload,
-		},
-		{
-			Name:  "shutdown",
-			Usage: "Shutdown server",
-			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:  "restart, r",
-					Usage: "restart server(todo)",
-				},
-			},
-			Action: actionShutdown,
-		},
-		{
-			Name:    "conftest",
-			Aliases: []string{"t"},
-			Usage:   "Test if config file is valid",
-			Action:  actionConfigTest,
-		},
-		{
-			Name:  "update-self",
-			Usage: "Update gosuv itself",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "channel, c",
-					Usage: "update channel name, stable or dev",
-					Value: "stable",
-				},
-				cli.BoolFlag{
-					Name:  "yes, y",
-					Usage: "Do not promote to confirm",
-				},
-			},
-			Action: actionUpdateSelf,
-		},
-		{
-			Name:   "edit",
-			Usage:  "Edit config file",
-			Action: actionEdit,
-		},
-		{
-			Name:    "version",
-			Usage:   "Show version",
-			Aliases: []string{"v"},
-			Action:  actionVersion,
-		},
-	}
-	if err := app.Run(os.Args); err != nil {
-		os.Exit(1)
+	err = s.Run()
+	if err != nil {
+		Log.Error(err)
 	}
 }

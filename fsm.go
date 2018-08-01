@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -224,14 +225,23 @@ type Process struct {
 
 // FIXME(ssx): maybe need to return error
 func (p *Process) buildCommand() *kexec.KCommand {
+	var err error
 	cmd := kexec.CommandString(p.Command)
+	test := exec.Command("cmd")
+	Log.Info("test cmd path:", test.Path)
+	lp, err := exec.LookPath("cmd")
+	abslp, err := filepath.Abs(lp)
+	Log.Info("test cmd abslp path:", abslp)
+	// user abs path. as cmd run in service cant find com.exe
+	cmd.Cmd.Path = abslp
+
 	// cmd := kexec.Command(p.Command[0], p.Command[1:]...)
 	logDir := filepath.Join(defaultGosuvDir, "log", sanitize.Name(pinyin.Convert(p.Name)))
 	if !IsDir(logDir) {
 		os.MkdirAll(logDir, 0755)
 	}
 	var fout io.Writer
-	var err error
+
 	// p.OutputFile, err = os.OpenFile(filepath.Join(logDir, "output.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	// p.OutputFile = NewRotate(filepath.Join(logDir, "output.log"))
 	p.OutputFile = &lumberjack.Logger{
@@ -253,6 +263,7 @@ func (p *Process) buildCommand() *kexec.KCommand {
 	cmd.Stderr = io.MultiWriter(p.Stderr, p.Output, fout)
 	// config environ
 	cmd.Env = os.Environ() // inherit current vars
+	Log.Info("current env", os.Environ())
 	environ := map[string]string{}
 	if p.User != "" {
 		if !IsRoot() {
@@ -284,7 +295,7 @@ func (p *Process) buildCommand() *kexec.KCommand {
 	if strings.HasPrefix(cmd.Dir, "~") {
 		cmd.Dir = mapping("HOME") + cmd.Dir[1:]
 	}
-	log.Infof("[%s] use dir: %s\n", p.Name, cmd.Dir)
+	Log.Printf("[%s] use dir: %s\n", p.Name, cmd.Dir)
 	return cmd
 }
 
@@ -362,12 +373,13 @@ func (p *Process) startCommand() {
 	// p.Stdout.Reset()
 	// p.Stderr.Reset()
 	// p.Output.Reset() // Donot reset because log is still needed.
-	log.Printf("start cmd(%s): %s", p.Name, p.Command)
+	Log.Printf("start cmd(%s): %s", p.Name, p.Command)
 	p.cmd = p.buildCommand()
-
+	Log.Info("cmd path:", p.cmd.Cmd.Path)
 	p.SetState(Running)
+
 	if err := p.cmd.Start(); err != nil {
-		log.Warnf("program %s start failed: %v", p.Name, err)
+		Log.Printf("program %s start failed: %v", p.Name, err)
 		p.SetState(Fatal)
 		p.cmd = nil
 		return
@@ -381,7 +393,7 @@ func (p *Process) startCommand() {
 		case <-errC:
 			// if p.cmd.Wait() returns, it means program and its sub process all quited. no need to kill again
 			// func Wait() will only return when program session finishs. (Only Tested on mac)
-			log.Printf("program(%s) finished, time used %v", p.Name, time.Since(startTime))
+			Log.Printf("program(%s) finished, time used %v", p.Name, time.Since(startTime))
 			if time.Since(startTime) < time.Duration(p.StartSeconds)*time.Second {
 				if p.retryLeft == p.StartRetries { // If first time quit so fast, just set to fatal
 					p.SetState(Fatal)
@@ -394,7 +406,7 @@ func (p *Process) startCommand() {
 
 			p.waitNextRetry()
 		case <-p.stopC:
-			log.Println("recv stop command")
+			Log.Println("recv stop command")
 			p.stopCommand() // clean up all process
 		}
 

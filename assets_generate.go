@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	var fs http.FileSystem = http.Dir("res")
+	var fs http.FileSystem = http.Dir(http.Dir(path.Join(defaultGosuvDir, "res")))
 
 	err := vfsgen.Generate(fs, vfsgen.Options{
 		PackageName:  "main",

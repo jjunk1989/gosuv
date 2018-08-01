@@ -3,7 +3,10 @@
 
 package main
 
-import "net/http"
+import (
+	"net/http"
+	"path"
+)
 
 // Assets contains project assets.
-var Assets http.FileSystem = http.Dir("res")
+var Assets http.FileSystem = http.Dir(http.Dir(path.Join(defaultGosuvDir, "res")))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/goji/httpauth"
 	"github.com/imroc/req"
@@ -116,8 +118,14 @@ func checkServerStatus() error {
 }
 
 type ServiceManager struct {
+	Server *http.Server
 }
 
+func NewServiceManager() *ServiceManager {
+	return &ServiceManager{
+		Server: &http.Server{},
+	}
+}
 func (s *ServiceManager) Start(service.Service) (err error) {
 	if !service.Interactive() {
 		Log.Info("under sys service")
@@ -128,11 +136,12 @@ func (s *ServiceManager) Start(service.Service) (err error) {
 }
 
 func (s *ServiceManager) Stop(service.Service) (err error) {
-	return
+	Log.Info("ServiceManager stoped.")
+	return s.shutdown()
 }
 
 func (s *ServiceManager) run() {
-	Log.Info("startServerDirect")
+	Log.Info("start serviceManager.")
 	suv, hdlr, err := newSupervisorHandler()
 	if err != nil {
 		Log.Error(err)
@@ -145,17 +154,42 @@ func (s *ServiceManager) run() {
 
 	cfg, _ = readConf(path.Join(defaultGosuvDir, "config.yml"))
 	auth := cfg.Server.HttpAuth
+
 	if auth.Enabled {
 		hdlr = httpauth.SimpleBasicAuth(auth.User, auth.Password)(hdlr)
 	}
-	http.Handle("/", hdlr)
-	addr := cfg.Server.Addr
+
+	mux := http.NewServeMux()
+	mux.Handle("/", hdlr)
+	Log.Info("Assets path: ", Assets, http.Dir(path.Join(defaultGosuvDir, "res")))
+	mux.Handle("/res/", http.StripPrefix("/res/", http.FileServer(Assets)))
+
+	mux.HandleFunc("/test", func(w http.ResponseWriter, req *http.Request) {
+		Log.Info("receive test")
+		w.Write([]byte("test"))
+	})
+	s.Server.Addr = "0.0.0.0:10000"
+	s.Server.Handler = mux
+
 	suv.AutoStartPrograms()
-	Log.Info("server listen on:", addr)
-	if err = http.ListenAndServe(addr, nil); err != nil {
+
+	Log.Info("server listen on:", s.Server.Addr)
+
+	if err = s.Server.ListenAndServe(); err != nil {
 		Log.Error("http listen error", err)
 	}
+
 	Log.Info("server stoped")
+}
+
+func (s *ServiceManager) shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	err := s.Server.Shutdown(ctx)
+	if err != nil {
+		Log.Error("stop proxy server error:", err)
+	}
+	return err
 }
 
 func init() {
@@ -165,8 +199,10 @@ func init() {
 		defaultGosuvDir = filepath.Join(UserHomeDir(), ".gosuv")
 	}
 	log.Info("defaultGosuvDir:", defaultGosuvDir)
-	http.Handle("/res/", http.StripPrefix("/res/", http.FileServer(Assets))) // http.StripPrefix("/res/", Assets))
+	//	http.Handle("/res/", http.StripPrefix("/res/", http.FileServer(Assets))) // http.StripPrefix("/res/", Assets))
 	Log = loger.NewLoger(path.Join(defaultGosuvDir, "servermanagerLog"))
+	// init asset folder
+	Assets = http.Dir(http.Dir(path.Join(defaultGosuvDir, "res")))
 }
 
 func main() {
@@ -180,7 +216,7 @@ func main() {
 		Description: "Mananger server.",
 	}
 
-	s, err := service.New(&ServiceManager{}, svcConfig)
+	s, err := service.New(NewServiceManager(), svcConfig)
 	if err != nil {
 		Log.Error(err)
 	}

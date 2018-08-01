@@ -21,7 +21,7 @@ import (
 	"github.com/go-yaml/yaml"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/qiniu/log"
+	_ "github.com/qiniu/log"
 	_ "github.com/shurcooL/vfsgen"
 	"github.com/soopsio/gosuv/gops"
 	"github.com/soopsio/kexec"
@@ -121,7 +121,7 @@ func (s *Supervisor) addOrUpdateProgram(pg Program) error {
 			return nil
 		}
 		s.broadcastEvent(pg.Name + " update")
-		log.Println("Update:", pg.Name)
+		Log.Info("Update:", pg.Name)
 		origProc := s.procMap[pg.Name]
 		isRunning := origProc.IsRunning()
 		go func() {
@@ -217,7 +217,7 @@ func (s *Supervisor) removeProgram(name string) {
 		names = append(names, pName)
 	}
 	s.names = names
-	log.Printf("stop before delete program: %s", name)
+	Log.Printf("stop before delete program: %s", name)
 	s.stopAndWait(name)
 	delete(s.procMap, name)
 	delete(s.pgMap, name)
@@ -295,7 +295,7 @@ func (s *Supervisor) hShutdown(w http.ResponseWriter, r *http.Request) {
 
 func (s *Supervisor) hReload(w http.ResponseWriter, r *http.Request) {
 	err := s.loadDB()
-	log.Println("reload config file")
+	Log.Println("reload config file")
 	if err == nil {
 		s.renderJSON(w, JSONResponse{
 			Status: 0,
@@ -490,7 +490,7 @@ func (s *Supervisor) hWebhook(w http.ResponseWriter, r *http.Request) {
 				cmd.Terminate(syscall.SIGTERM)
 			}
 			if err != nil {
-				log.Warnf("webhook command error: %v", err)
+				Log.Warn("webhook command error:", err)
 				// Trigger pushover notification
 			}
 			if isRunning {
@@ -499,7 +499,7 @@ func (s *Supervisor) hWebhook(w http.ResponseWriter, r *http.Request) {
 		}()
 		io.WriteString(w, "success triggered")
 	} else {
-		log.Warnf("unknown webhook category: %v", category)
+		Log.Warn("unknown webhook category:", category)
 	}
 }
 
@@ -508,7 +508,7 @@ var upgrader = websocket.Upgrader{}
 func (s *Supervisor) wsEvents(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		Log.Info("upgrade:", err)
 		return
 	}
 	defer c.Close()
@@ -526,13 +526,13 @@ func (s *Supervisor) wsEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("read:", mt, err)
+			Log.Println("read:", mt, err)
 			break
 		}
-		log.Printf("recv: %v %s", mt, message)
+		Log.Printf("recv: %v %s", mt, message)
 		err = c.WriteMessage(mt, message)
 		if err != nil {
-			log.Println("write:", err)
+			Log.Println("write:", err)
 			break
 		}
 	}
@@ -540,17 +540,17 @@ func (s *Supervisor) wsEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Supervisor) wsLog(w http.ResponseWriter, r *http.Request) {
 	name := mux.Vars(r)["name"]
-	log.Println(name)
+	Log.Println(name)
 	proc, ok := s.procMap[name]
 	if !ok {
-		log.Println("No such process")
+		Log.Println("No such process")
 		// TODO: raise error here?
 		return
 	}
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		Log.Println("upgrade:", err)
 		return
 	}
 	defer c.Close()
@@ -568,7 +568,7 @@ func (s *Supervisor) wsLog(w http.ResponseWriter, r *http.Request) {
 func (s *Supervisor) wsPerf(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		Log.Println("upgrade:", err)
 		return
 	}
 	defer c.Close()
@@ -576,14 +576,14 @@ func (s *Supervisor) wsPerf(w http.ResponseWriter, r *http.Request) {
 	name := mux.Vars(r)["name"]
 	proc, ok := s.procMap[name]
 	if !ok {
-		log.Println("No such process")
+		Log.Println("No such process")
 		// TODO: raise error here?
 		return
 	}
 	for {
 		// c.SetWriteDeadline(time.Now().Add(3 * time.Second))
 		if proc.cmd == nil || proc.cmd.Process == nil {
-			log.Println("process not running")
+			Log.Println("process not running")
 			return
 		}
 		pid := proc.cmd.Process.Pid
@@ -610,7 +610,7 @@ func (s *Supervisor) Close() {
 	for _, proc := range s.procMap {
 		s.stopAndWait(proc.Name)
 	}
-	log.Println("server closed")
+	Log.Println("server closed")
 }
 
 func (s *Supervisor) catchExitSignal() {
@@ -619,10 +619,10 @@ func (s *Supervisor) catchExitSignal() {
 	go func() {
 		for sig := range sigC {
 			if sig == syscall.SIGHUP {
-				log.Println("Receive SIGHUP, just ignore")
+				Log.Println("Receive SIGHUP, just ignore")
 				continue
 			}
-			log.Printf("Got signal: %v, stopping all running process\n", sig)
+			Log.Printf("Got signal: %v, stopping all running process\n", sig)
 			s.Close()
 			break
 		}
@@ -633,7 +633,7 @@ func (s *Supervisor) catchExitSignal() {
 func (s *Supervisor) AutoStartPrograms() {
 	for _, proc := range s.procMap {
 		if proc.Program.StartAuto {
-			log.Printf("auto start %s", strconv.Quote(proc.Name))
+			Log.Printf("auto start %s", strconv.Quote(proc.Name))
 			proc.Operate(StartEvent)
 		}
 	}

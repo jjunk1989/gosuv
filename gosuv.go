@@ -168,7 +168,7 @@ func (s *ServiceManager) run() {
 		Log.Info("receive test")
 		w.Write([]byte("test"))
 	})
-	s.Server.Addr = "0.0.0.0:10000"
+	s.Server.Addr = cfg.Server.Addr
 	s.Server.Handler = mux
 
 	suv.AutoStartPrograms()

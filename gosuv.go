@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	_ "os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -119,6 +120,7 @@ func checkServerStatus() error {
 
 type ServiceManager struct {
 	Server *http.Server
+	Suv    *Supervisor
 }
 
 func NewServiceManager() *ServiceManager {
@@ -136,6 +138,10 @@ func (s *ServiceManager) Start(service.Service) (err error) {
 }
 
 func (s *ServiceManager) Stop(service.Service) (err error) {
+	if !service.Interactive() {
+		Log.Info("under sys service")
+		s.Suv.KillAll()
+	}
 	Log.Info("ServiceManager stoped.")
 	return s.shutdown()
 }
@@ -172,7 +178,8 @@ func (s *ServiceManager) run() {
 	s.Server.Handler = mux
 
 	suv.AutoStartPrograms()
-
+	// save suv
+	s.Suv = suv
 	Log.Info("server listen on:", s.Server.Addr)
 
 	if err = s.Server.ListenAndServe(); err != nil {
@@ -182,9 +189,15 @@ func (s *ServiceManager) run() {
 	Log.Info("server stoped")
 }
 
+func (s *ServiceManager) killAll() {
+	s.Suv.KillAll()
+}
+
 func (s *ServiceManager) shutdown() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// close all program
+	Log.Info("shut down all program")
 	err := s.Server.Shutdown(ctx)
 	if err != nil {
 		Log.Error("stop proxy server error:", err)
@@ -193,16 +206,22 @@ func (s *ServiceManager) shutdown() error {
 }
 
 func init() {
-	defaultGosuvDir = os.Getenv("GOSUV_HOME_DIR")
-	if defaultGosuvDir == "" {
-		log.Info("cant find env: GOSUV_HOME_DIR, please set.")
-		defaultGosuvDir = filepath.Join(UserHomeDir(), ".gosuv")
-	}
-	log.Info("defaultGosuvDir:", defaultGosuvDir)
+	//	defaultGosuvDir = os.Getenv("GOSUV_HOME_DIR")
+	//	if defaultGosuvDir == "" {
+	//		//		defaultGosuvDir = filepath.Join(UserHomeDir(), ".gosuv")
+	//		exePath := filepath.Dir(os.Args[0])
+	//		defaultGosuvDir, _ = filepath.Abs(exePath)
+	//		log.Info("未找到系统环境变量: GOSUV_HOME_DIR.")
+	//		log.Info("使用当前目录:", defaultGosuvDir)
+	//	}
+	exePath := filepath.Dir(os.Args[0])
+	defaultGosuvDir, _ = filepath.Abs(exePath)
+	log.Info("使用当前目录:", defaultGosuvDir)
 	//	http.Handle("/res/", http.StripPrefix("/res/", http.FileServer(Assets))) // http.StripPrefix("/res/", Assets))
 	Log = loger.NewLoger(path.Join(defaultGosuvDir, "servermanagerLog"))
 	// init asset folder
-	Assets = http.Dir(http.Dir(path.Join(defaultGosuvDir, "res")))
+	//	log.Info("asstes path:", defaultGosuvDir, path.Join(defaultGosuvDir, "res"))
+	Assets = http.Dir(path.Join(defaultGosuvDir, "res"))
 }
 
 func main() {

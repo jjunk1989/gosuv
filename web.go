@@ -91,6 +91,7 @@ func (s *Supervisor) stopAndWait(name string) error {
 	if !p.IsRunning() {
 		return nil
 	}
+	Log.Info("stop program:", p.Name)
 	c := make(chan string, 0)
 	s.addStatusChangeListener(c)
 	// p.stopCommand()
@@ -133,7 +134,9 @@ func (s *Supervisor) addOrUpdateProgram(pg Program) error {
 			if isRunning {
 				newProc.Operate(StartEvent)
 			}
-			s.saveDB()
+			if err := s.saveDB(); err != nil {
+				Log.Warn("addOrUpdateProgram save db err", err)
+			}
 		}()
 	} else {
 		s.names = append(s.names, pg.Name)
@@ -205,7 +208,10 @@ func (s *Supervisor) saveDB() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(s.programPath(), data, 0644)
+	Log.Info("save db to:", s.programPath())
+	err = ioutil.WriteFile(s.programPath(), data, 0644)
+	Log.Info("save db  errs:", err)
+	return err
 }
 
 func (s *Supervisor) removeProgram(name string) {
@@ -373,10 +379,17 @@ func (s *Supervisor) hAddProgram(w http.ResponseWriter, r *http.Request) {
 				"error":  err.Error(),
 			})
 		} else {
-			s.saveDB()
-			data, _ = json.Marshal(map[string]interface{}{
-				"status": 0,
-			})
+			if err := s.saveDB(); err != nil {
+				Log.Warn("hAddProgram save db error: ", err)
+				data, _ = json.Marshal(map[string]interface{}{
+					"status": 0,
+					"error":  err.Error(),
+				})
+			} else {
+				data, _ = json.Marshal(map[string]interface{}{
+					"status": 0,
+				})
+			}
 		}
 	}
 	w.Write(data)
@@ -394,6 +407,7 @@ func (s *Supervisor) hUpdateProgram(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	Log.Info("update program", pg.Name)
 	err = s.addOrUpdateProgram(pg)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -420,10 +434,18 @@ func (s *Supervisor) hDelProgram(w http.ResponseWriter, r *http.Request) {
 		})
 	} else {
 		s.removeProgram(name)
-		s.saveDB()
-		data, _ = json.Marshal(map[string]interface{}{
-			"status": 0,
-		})
+		if err := s.saveDB(); err != nil {
+			Log.Warn("hDelProgram save db error: ", err)
+			data, _ = json.Marshal(map[string]interface{}{
+				"status": 1,
+				"error":  err,
+			})
+		} else {
+			data, _ = json.Marshal(map[string]interface{}{
+				"status": 0,
+			})
+		}
+
 	}
 	w.Write(data)
 }
@@ -609,6 +631,13 @@ func (s *Supervisor) wsPerf(w http.ResponseWriter, r *http.Request) {
 func (s *Supervisor) Close() {
 	for _, proc := range s.procMap {
 		s.stopAndWait(proc.Name)
+	}
+	Log.Println("server closed")
+}
+
+func (s *Supervisor) KillAll() {
+	for _, proc := range s.procMap {
+		proc.killCommand()
 	}
 	Log.Println("server closed")
 }

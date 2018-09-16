@@ -227,12 +227,13 @@ type Process struct {
 func (p *Process) buildCommand() *kexec.KCommand {
 	var err error
 	cmd := kexec.CommandString(p.Command)
-	test := exec.Command("cmd")
-	Log.Info("test cmd path:", test.Path)
+
 	lp, err := exec.LookPath("cmd")
 	abslp, err := filepath.Abs(lp)
-	Log.Info("test cmd abslp path:", abslp)
 	// user abs path. as cmd run in service cant find com.exe
+	//	cmd := &kexec.KCommand{
+	//		Cmd: exec.Command("cmd", "/k", p.Command),
+	//	}
 	cmd.Cmd.Path = abslp
 
 	// cmd := kexec.Command(p.Command[0], p.Command[1:]...)
@@ -263,7 +264,7 @@ func (p *Process) buildCommand() *kexec.KCommand {
 	cmd.Stderr = io.MultiWriter(p.Stderr, p.Output, fout)
 	// config environ
 	cmd.Env = os.Environ() // inherit current vars
-	Log.Info("current env", os.Environ())
+	//	Log.Info("current env", os.Environ())
 	environ := map[string]string{}
 	if p.User != "" {
 		if !IsRoot() {
@@ -295,6 +296,7 @@ func (p *Process) buildCommand() *kexec.KCommand {
 	if strings.HasPrefix(cmd.Dir, "~") {
 		cmd.Dir = mapping("HOME") + cmd.Dir[1:]
 	}
+	cmd.Dir = filepath.Join(defaultGosuvDir, p.Dir)
 	Log.Printf("[%s] use dir: %s\n", p.Name, cmd.Dir)
 	return cmd
 }
@@ -319,6 +321,26 @@ func (p *Process) waitNextRetry() {
 	}
 }
 
+func (p *Process) killCommand() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	defer p.SetState(Stopped)
+	if p.cmd == nil {
+		return
+	}
+	Log.Info("kill command", p.cmd.Path)
+	p.SetState(Stopping)
+	if p.cmd.Process != nil {
+		Log.Info("kill Process", p.cmd.Terminate(syscall.SIGKILL))
+		Log.Info("kill Process", p.cmd.Process.Kill())
+	}
+	if p.OutputFile != nil {
+		p.OutputFile.Close()
+		p.OutputFile = nil
+	}
+	p.cmd = nil
+}
+
 func (p *Process) stopCommand() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -336,19 +358,19 @@ func (p *Process) stopCommand() {
 		}()
 		select {
 		case <-stopch: // TODO(ssx): add it to config
-			log.Println(p.Name, "停止完成")
+			Log.Println(p.Name, "停止完成")
 		case <-time.After(10 * time.Second):
-			log.Println(p.Name, "停止超时，强制 kill")
+			Log.Println(p.Name, "停止超时，强制 kill")
 			p.cmd.Process.Signal(syscall.SIGKILL)
 		}
 	}
 	select {
 	case <-GoFunc(p.cmd.Wait):
 		p.RunNotification(FSMState("quit normally"))
-		log.Printf("program(%s) quit normally", p.Name)
+		Log.Printf("program(%s) quit normally", p.Name)
 	case <-time.After(time.Duration(p.StopTimeout) * time.Second): // TODO: add 3s to config
 		p.RunNotification(FSMState("terminate all"))
-		log.Printf("program(%s) terminate all", p.Name)
+		Log.Printf("program(%s) terminate all", p.Name)
 		p.cmd.Terminate(syscall.SIGKILL) // cleanup
 	}
 	err := p.cmd.Wait() // This is OK, because Signal KILL will definitely work
@@ -373,9 +395,9 @@ func (p *Process) startCommand() {
 	// p.Stdout.Reset()
 	// p.Stderr.Reset()
 	// p.Output.Reset() // Donot reset because log is still needed.
-	Log.Printf("start cmd(%s): %s", p.Name, p.Command)
+	//	Log.Printf("start cmd(%s): %s", p.Name, p.Command)
 	p.cmd = p.buildCommand()
-	Log.Info("cmd path:", p.cmd.Cmd.Path)
+	//	Log.Info("cmd path:", p.cmd)
 	p.SetState(Running)
 
 	if err := p.cmd.Start(); err != nil {

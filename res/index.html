@@ -58,9 +58,9 @@
         <div class="panel panel-default">
             <div class="panel-heading">
                 Master
-                <span class="panel-icon pull-right">
+<!--                <span class="panel-icon pull-right">
                     <button class="btn btn-success btn-sm" rel="tooltip"  v-on:click="addNewProgram()" data-original-title="Click to add programs"><i class="fa fa-plus"></i>New Program</button>
-                </span>
+                </span>-->
             </div>
             <div class="panel-body">
                 <table class="table table-hover table-bordered">
@@ -96,12 +96,12 @@
                                     :disabled="!canStop(p.status)">
                                 <span class="glyphicon glyphicon-stop"></span> Stop
                             </button>
-                            <button v-on:click="showEditProgram(p.program)" class="btn btn-default btn-xs">
+<!--                            <button v-on:click="showEditProgram(p.program)" class="btn btn-default btn-xs">
                                 <span class="glyphicon glyphicon-edit"></span> Edit
                             </button>
                             <button class="btn btn-default btn-xs" v-on:click="cmdDelete(p.program.name)">
                                 <span class="color-red glyphicon glyphicon-trash"></span> Delete
-                            </button>
+                            </button>-->
                         </td>
                     </tr>
                     </tbody>
@@ -111,12 +111,12 @@
         <div v-for="(slave,items) in slaves" class="panel panel-default">
             <div class="panel-heading">
                 {{slave}}
-                <span class="panel-icon pull-right">
+<!--                <span class="panel-icon pull-right">
                     <button class="btn btn-success btn-sm" rel="tooltip"  v-on:click="addNewProgram(slave)"
                             data-original-title="Click to add programs">
                         <i class="fa fa-plus"></i>New Program
                     </button>
-                </span>
+                </span>-->
             </div>
             <div class="panel-body">
                 <table class="table table-hover table-bordered">
@@ -152,12 +152,12 @@
                                     :disabled="!canStop(p.status)">
                                 <span class="glyphicon glyphicon-stop"></span> Stop
                             </button>
-                            <button v-on:click="showEditProgram(p.program,slave)" class="btn btn-default btn-xs">
+<!--                            <button v-on:click="showEditProgram(p.program,slave)" class="btn btn-default btn-xs">
                                 <span class="glyphicon glyphicon-edit"></span> Edit
-                            </button>
-                            <button class="btn btn-default btn-xs" v-on:click="cmdDelete(p.program.name,slave)">
+                            </button>-->
+<!--                            <button class="btn btn-default btn-xs" v-on:click="cmdDelete(p.program.name,slave)">
                                 <span class="color-red glyphicon glyphicon-trash"></span> Delete
-                            </button>
+                            </button>-->
                         </td>
                     </tr>
                     </tbody>

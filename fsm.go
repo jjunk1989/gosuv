@@ -397,7 +397,9 @@ func (p *Process) startCommand() {
 	// p.Output.Reset() // Donot reset because log is still needed.
 	//	Log.Printf("start cmd(%s): %s", p.Name, p.Command)
 	p.cmd = p.buildCommand()
-	//	Log.Info("cmd path:", p.cmd)
+	Log.Info("cmd path:", p.cmd.Path)
+	Log.Info("cmd dir:", p.cmd.Dir)
+	Log.Info("cmd dir:", p.cmd.Args)
 	p.SetState(Running)
 
 	if err := p.cmd.Start(); err != nil {

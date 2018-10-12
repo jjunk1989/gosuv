@@ -56,7 +56,7 @@ func (s *Supervisor) procs() []*Process {
 }
 
 func (s *Supervisor) programPath() string {
-	return filepath.Join(s.ConfigDir, "programs.yml")
+	return filepath.Join(s.ConfigDir, defaultProgramPath)
 }
 
 func (s *Supervisor) newProcess(pg Program) *Process {

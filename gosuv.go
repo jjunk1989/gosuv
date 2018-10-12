@@ -29,6 +29,8 @@ var (
 	version string = "master"
 	cfg     Configuration
 	Log     *loger.Loger
+	// default program name
+	defaultProgramPath string = "programs.yml"
 )
 
 type TagInfo struct {
@@ -226,8 +228,16 @@ func init() {
 
 func main() {
 	//	var defaultConfigPath = filepath.Join(defaultGosuvDir, "conf/config.yml")
+	pathFlag := flag.String("program", "", "program config file name. use:  .\gosuv.exe -program ttt.yml")
 	svcFlag := flag.String("service", "", "start, stop, restart, install, uninstall.")
 	flag.Parse()
+
+	if *pathFlag != "" {
+		// config program name use flag
+		//  .\gosuv.exe -program ttt.yml
+		log.Info("use program config file:", *pathFlag)
+		defaultProgramPath = *pathFlag
+	}
 
 	svcConfig := &service.Config{
 		Name:        "ServerManager",

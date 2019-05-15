@@ -228,7 +228,7 @@ func init() {
 
 func main() {
 	//	var defaultConfigPath = filepath.Join(defaultGosuvDir, "conf/config.yml")
-	pathFlag := flag.String("program", "", "program config file name. use:  .\gosuv.exe -program ttt.yml")
+	pathFlag := flag.String("program", "", "program config file name. use: .\\gosuv.exe -program ttt.yml")
 	svcFlag := flag.String("service", "", "start, stop, restart, install, uninstall.")
 	flag.Parse()
 
